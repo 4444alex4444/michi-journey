@@ -5,6 +5,7 @@ import SceneScreen from '@/components/SceneScreen'
 import PathScreen from '@/components/PathScreen'
 import ChatScreen from '@/components/ChatScreen'
 import SettingsScreen from '@/components/SettingsScreen'
+import AtmosphericBackground from '@/components/AtmosphericBackground'
 import { loadProfile, UserProfile } from '@/lib/profile'
 
 export type Screen = 'home' | 'scene' | 'path' | 'chat' | 'settings'
@@ -36,7 +37,10 @@ export default function App() {
   const fg = isDark ? '#e8e6df' : '#2a2825'
 
   return (
-    <div style={{ minHeight: '100dvh', background: bg, color: fg, transition: 'background 0.5s' }}>
+    <div style={{ minHeight: '100dvh', color: fg, transition: 'color 0.5s', position: 'relative' }}>
+      <AtmosphericBackground isDark={isDark} />
+      {/* Content layer above background */}
+      <div style={{ position: 'relative', zIndex: 1 }}>
       {/* Screen router */}
       {screen === 'home' && <HomeScreen profile={profile} onNavigate={setScreen} isDark={isDark} />}
       {screen === 'scene' && <SceneScreen profile={profile} onBack={() => setScreen('home')} onProfileUpdate={refreshProfile} isDark={isDark} />}
@@ -48,6 +52,7 @@ export default function App() {
       {screen === 'home' && (
         <BottomNav current={screen} onNavigate={setScreen} isDark={isDark} />
       )}
+      </div>
     </div>
   )
 }
