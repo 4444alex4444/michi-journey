@@ -75,10 +75,10 @@ export default function ChatScreen({ profile, onBack, isDark }: Props) {
           <div key={i} style={{ display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
             {msg.role === 'michi' && <span style={{ fontSize: 20, marginRight: 8, alignSelf: 'flex-end', marginBottom: 2 }}>🐱</span>}
             <div style={{
-              maxWidth: '78%', padding: '12px 16px', borderRadius: msg.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+              maxWidth: '78%', padding: '14px 18px', borderRadius: msg.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
               background: msg.role === 'user' ? userBubble : michiBubble,
               border: `1px solid ${msg.role === 'user' ? border : isDark ? 'rgba(196,168,130,0.2)' : 'rgba(139,108,66,0.12)'}`,
-              fontSize: 14, color: fg, lineHeight: 1.6,
+              fontSize: 16, color: fg, lineHeight: 1.7,
             }}>
               {msg.content}
             </div>
@@ -108,7 +108,7 @@ export default function ChatScreen({ profile, onBack, isDark }: Props) {
           style={{
             flex: 1, padding: '12px 16px', borderRadius: 24,
             background: cardBg, border: `1px solid ${border}`,
-            fontSize: 14, color: fg, outline: 'none',
+            fontSize: 16, color: fg, outline: 'none',
           }}
         />
         <button
