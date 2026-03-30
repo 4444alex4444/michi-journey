@@ -155,16 +155,12 @@ ${message}`
     })
 
     if (!firstAttempt.ok) {
-      console.error('OpenAI first attempt error:', firstAttempt.status, firstAttempt.raw)
+  console.error('OpenAI first attempt error:', firstAttempt.status, firstAttempt.raw)
 
-      if (mustSearch) {
-        return NextResponse.json({
-          reply: 'Я бы хотел сначала проверить актуальные данные по официальным источникам, но web search сейчас не сработал. Лучше попробуй ещё раз чуть позже.',
-        })
-      }
-
-      throw new Error(`OpenAI ${firstAttempt.status}`)
-    }
+  return NextResponse.json({
+    reply: `DEBUG OpenAI ${firstAttempt.status}: ${firstAttempt.raw}`,
+  })
+}
 
     const data = JSON.parse(firstAttempt.raw)
     const reply = extractTextFromResponsesApi(data) || FALLBACKS[0]
