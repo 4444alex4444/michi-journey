@@ -1,5 +1,5 @@
 'use client'
-import { useState, useRef, useEffect } from 'react'
+import { Fragment, ReactNode, useEffect, useRef, useState } from 'react'
 import { UserProfile } from '@/lib/profile'
 
 interface Props {
@@ -11,6 +11,120 @@ interface Props {
 interface Message {
   role: 'user' | 'michi'
   content: string
+}
+
+function renderInline(text: string, linkColor: string): ReactNode[] {
+  const pattern = /(\[([^\]]+)\]\((https?:\/\/[^\s)]+)\))|(https?:\/\/[^\s]+)/g
+  const nodes: ReactNode[] = []
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+  let key = 0
+
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      nodes.push(<Fragment key={`text-${key++}`}>{text.slice(lastIndex, match.index)}</Fragment>)
+    }
+
+    const markdownText = match[2]
+    const markdownUrl = match[3]
+    const rawUrl = match[4]
+
+    if (markdownUrl) {
+      nodes.push(
+        <a
+          key={`link-${key++}`}
+          href={markdownUrl}
+          target="_blank"
+          rel="noreferrer"
+          style={{ color: linkColor, textDecoration: 'underline', wordBreak: 'break-word' }}
+        >
+          {markdownText}
+        </a>
+      )
+    } else if (rawUrl) {
+      nodes.push(
+        <a
+          key={`raw-${key++}`}
+          href={rawUrl}
+          target="_blank"
+          rel="noreferrer"
+          style={{ color: linkColor, textDecoration: 'underline', wordBreak: 'break-word' }}
+        >
+          {rawUrl}
+        </a>
+      )
+    }
+
+    lastIndex = pattern.lastIndex
+  }
+
+  if (lastIndex < text.length) {
+    nodes.push(<Fragment key={`tail-${key++}`}>{text.slice(lastIndex)}</Fragment>)
+  }
+
+  return nodes
+}
+
+function renderMessageContent(content: string, linkColor: string): ReactNode {
+  const normalized = content.replace(/\r/g, '').trim()
+  const lines = normalized.split('\n')
+  const blocks: ReactNode[] = []
+
+  let paragraph: string[] = []
+  let listItems: string[] = []
+
+  const flushParagraph = (indexKey: string) => {
+    if (!paragraph.length) return
+    blocks.push(
+      <p key={`p-${indexKey}`} style={{ margin: '0 0 10px', lineHeight: 1.7 }}>
+        {renderInline(paragraph.join(' '), linkColor)}
+      </p>
+    )
+    paragraph = []
+  }
+
+  const flushList = (indexKey: string) => {
+    if (!listItems.length) return
+    blocks.push(
+      <ul key={`ul-${indexKey}`} style={{ margin: '0 0 10px 0', paddingLeft: '18px' }}>
+        {listItems.map((item, i) => (
+          <li key={`li-${indexKey}-${i}`} style={{ marginBottom: 6, lineHeight: 1.6 }}>
+            {renderInline(item, linkColor)}
+          </li>
+        ))}
+      </ul>
+    )
+    listItems = []
+  }
+
+  lines.forEach((rawLine, i) => {
+    const line = rawLine.trim()
+    const isBullet = /^[-•*]\s+/.test(line) || /^\d+\.\s+/.test(line)
+
+    if (!line) {
+      flushParagraph(String(i))
+      flushList(String(i))
+      return
+    }
+
+    if (isBullet) {
+      flushParagraph(String(i))
+      listItems.push(line.replace(/^[-•*]\s+/, '').replace(/^\d+\.\s+/, ''))
+      return
+    }
+
+    flushList(String(i))
+    paragraph.push(line)
+  })
+
+  flushParagraph('end')
+  flushList('end')
+
+  if (!blocks.length) {
+    return <p style={{ margin: 0, lineHeight: 1.7 }}>{renderInline(normalized, linkColor)}</p>
+  }
+
+  return <>{blocks}</>
 }
 
 export default function ChatScreen({ profile, onBack, isDark }: Props) {
@@ -29,6 +143,7 @@ export default function ChatScreen({ profile, onBack, isDark }: Props) {
   const border = isDark ? '#2a2a3e' : '#e8e5df'
   const userBubble = isDark ? '#2a2a3e' : '#f0ede8'
   const michiBubble = isDark ? 'rgba(196,168,130,0.12)' : 'rgba(139,108,66,0.08)'
+  const linkColor = isDark ? '#d8c29d' : '#7a5c30'
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -83,8 +198,9 @@ export default function ChatScreen({ profile, onBack, isDark }: Props) {
               background: msg.role === 'user' ? userBubble : michiBubble,
               border: `1px solid ${msg.role === 'user' ? border : isDark ? 'rgba(196,168,130,0.2)' : 'rgba(139,108,66,0.12)'}`,
               fontSize: 16, color: fg, lineHeight: 1.7,
+              overflowWrap: 'anywhere',
             }}>
-              {msg.content}
+              {renderMessageContent(msg.content, linkColor)}
             </div>
           </div>
         ))}
