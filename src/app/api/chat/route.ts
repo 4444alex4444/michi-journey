@@ -1,18 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const SYSTEM = `Ты — Мичи (Michi, 道), аниме-кот путешественник. Проводник подростка 14-16 лет на пути к японскому языку и Японии.
+const SYSTEM = `Ты — Мичи (Michi, 道), аниме-кот путешественник.
+Проводник подростка 14–16 лет на пути к японскому языку, учёбе в Японии и более зрелому пониманию японской культуры.
 
-ХАРАКТЕР: добрый, наблюдательный, немного философ. Мягкий юмор без сарказма. Краткость — сила: 1-3 предложения максимум, если не просят больше.
+ХАРАКТЕР:
+добрый, наблюдательный, немного философ.
+Мягкий юмор без сарказма.
+Краткость — сила: обычно 1–3 предложения, если не просят больше.
 
-ТЕМЫ: японский язык, культура Японии, путь к учёбе (гранты, визы, университеты, языковые школы), дизайн, животные, поддержка настроения.
+ТЕМЫ:
+японский язык, культура Японии, путь к учёбе, дизайн, животные, мягкая поддержка настроения.
 
-ЗАПРЕТЫ: длинные лекции без запроса, сарказм, давление, другие темы.
+ЗАПРЕТЫ:
+длинные лекции без запроса, сарказм, давление, резкие оценки, уход в посторонние темы.
 
-СТИЛЬ: сначала образ или короткая мысль — потом польза. Иногда кошачья самоирония.
+СТИЛЬ:
+сначала образ или короткая мысль — потом польза.
+Иногда допустима кошачья самоирония.
+Не превращай ответ в эссе.
+Если вопрос пользователя простой — отвечай коротко.
 
-Если вопрос касается актуальных данных (гранты, визы, программы, цены, дедлайны) — ОБЯЗАТЕЛЬНО используй инструмент web_search для получения актуальной информации. Не отвечай по памяти на изменчивые факты.
-
-Язык ответа — тот же, что у пользователя.`
+ВАЖНО:
+- для вопросов про гранты, визы, дедлайны, стоимость, требования вузов, программы, поступление, стипендии и другую меняющуюся информацию сначала используй web search
+- если web search недоступен или не сработал, не выдумывай факты; честно скажи, что не удалось проверить актуальные данные прямо сейчас
+- для обычных языковых, мотивационных и атмосферных ответов работай без лишней длины
+- язык ответа — тот же, что у пользователя`
 
 const FALLBACKS = [
   'Хм. Что-то пошло не так на моей стороне. Один момент.',
@@ -20,63 +32,148 @@ const FALLBACKS = [
   'Технические сложности. Поезд немного опаздывает.',
 ]
 
+type HistoryItem = {
+  role: string
+  content: string
+}
+
+function needsLiveSearch(message: string): boolean {
+  const text = message.toLowerCase()
+
+  const keywords = [
+    'грант', 'гранты', 'стипенд', 'scholarship',
+    'виза', 'visa', 'дедлайн', 'deadline',
+    'стоимост', 'цена', 'tuition', 'fee', 'fees',
+    'университет', 'college', 'program', 'programme',
+    'поступлен', 'admission', 'requirements', 'требован',
+    'mext', 'eju', 'jasso', 'подработк', 'part-time',
+    'языковая школа', 'language school', 'общежит', 'housing'
+  ]
+
+  return keywords.some((k) => text.includes(k))
+}
+
+function extractTextFromResponsesApi(data: any): string {
+  if (typeof data?.output_text === 'string' && data.output_text.trim()) {
+    return data.output_text.trim()
+  }
+
+  const output = Array.isArray(data?.output) ? data.output : []
+  const parts: string[] = []
+
+  for (const item of output) {
+    const content = Array.isArray(item?.content) ? item.content : []
+    for (const block of content) {
+      if (block?.type === 'output_text' && typeof block?.text === 'string') {
+        parts.push(block.text)
+      }
+      if (block?.type === 'text' && typeof block?.text === 'string') {
+        parts.push(block.text)
+      }
+    }
+  }
+
+  return parts.join('').trim()
+}
+
+async function callOpenAI({
+  apiKey,
+  input,
+  useWebSearch,
+}: {
+  apiKey: string
+  input: string
+  useWebSearch: boolean
+}) {
+  const body: Record<string, unknown> = {
+    model: 'gpt-5-mini',
+    instructions: SYSTEM,
+    input,
+    max_output_tokens: 260,
+  }
+
+  if (useWebSearch) {
+    body.tools = [{ type: 'web_search_preview' }]
+  }
+
+  const response = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(body),
+  })
+
+  const raw = await response.text()
+
+  return {
+    ok: response.ok,
+    status: response.status,
+    raw,
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { message, profile, history } = await req.json()
-    const apiKey = process.env.ANTHROPIC_API_KEY
+
+    const apiKey = process.env.OpenAI_KEY_Michi
 
     if (!apiKey) {
-      return NextResponse.json({ reply: FALLBACKS[Math.floor(Math.random() * FALLBACKS.length)] })
+      return NextResponse.json({
+        reply: FALLBACKS[Math.floor(Math.random() * FALLBACKS.length)],
+      })
     }
 
-    const contextNote = `[Уровень японского пользователя: ${profile.level}, открыто сцен: ${profile.scenesOpened}]`
+    const safeProfile = profile ?? {}
+    const safeHistory: HistoryItem[] = Array.isArray(history) ? history.slice(-3) : []
 
-    const messages = [
-      ...history.map((m: { role: string; content: string }) => ({
-        role: m.role === 'michi' ? 'assistant' : 'user',
-        content: m.content,
-      })),
-      { role: 'user', content: `${contextNote}\n\n${message}` },
-    ]
+    const contextNote = `[Уровень японского пользователя: ${safeProfile.level ?? 'N4'}, открыто сцен: ${safeProfile.scenesOpened ?? 0}]`
 
-    const body: Record<string, unknown> = {
-      model: 'claude-sonnet-4-5',
-      max_tokens: 1024,
-      system: SYSTEM,
-      messages,
-      tools: [{
-        type: 'web_search_20250305',
-        name: 'web_search',
-      }],
-    }
+    const historyText = safeHistory
+      .map((m) => {
+        const role = m.role === 'michi' ? 'assistant' : 'user'
+        return `${role}: ${m.content}`
+      })
+      .join('\n')
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-beta': 'web-search-2025-03-05',
-      },
-      body: JSON.stringify(body),
+    const input = `${contextNote}
+
+${historyText ? `История:
+${historyText}
+
+` : ''}Текущее сообщение пользователя:
+${message}`
+
+    const mustSearch = needsLiveSearch(String(message ?? ''))
+
+    const firstAttempt = await callOpenAI({
+      apiKey,
+      input,
+      useWebSearch: mustSearch,
     })
 
-    if (!response.ok) {
-      const err = await response.text()
-      console.error('Anthropic error:', response.status, err)
-      throw new Error(`Anthropic ${response.status}`)
+    if (!firstAttempt.ok) {
+      console.error('OpenAI first attempt error:', firstAttempt.status, firstAttempt.raw)
+
+      if (mustSearch) {
+        return NextResponse.json({
+          reply: 'Я бы хотел сначала проверить актуальные данные по официальным источникам, но web search сейчас не сработал. Лучше попробуй ещё раз чуть позже.',
+        })
+      }
+
+      throw new Error(`OpenAI ${firstAttempt.status}`)
     }
 
-    const data = await response.json()
-
-    // Extract text from content blocks (may include tool_use and tool_result blocks)
-    const textBlocks = data.content?.filter((b: { type: string }) => b.type === 'text') ?? []
-    const reply = textBlocks.map((b: { text: string }) => b.text).join('').trim()
-      || FALLBACKS[0]
+    const data = JSON.parse(firstAttempt.raw)
+    const reply = extractTextFromResponsesApi(data) || FALLBACKS[0]
 
     return NextResponse.json({ reply })
   } catch (error) {
     console.error('Chat error:', error)
-    return NextResponse.json({ reply: FALLBACKS[Math.floor(Math.random() * FALLBACKS.length)] })
+    return NextResponse.json({
+      reply: FALLBACKS[Math.floor(Math.random() * FALLBACKS.length)],
+    })
   }
 }
