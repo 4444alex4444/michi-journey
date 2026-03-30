@@ -11,9 +11,20 @@ const SYSTEM = `Ты — Мичи (Michi, 道), аниме-кот путешес
 ТЕМЫ:
 японский язык, культура Японии, путь к учёбе, дизайн, животные, мягкая поддержка настроения.
 
+ЗАПРЕТЫ:
+длинные лекции без запроса, сарказм, давление, резкие оценки, уход в посторонние темы.
+
 СТИЛЬ:
 сначала образ или короткая мысль — потом польза.
-Язык ответа — тот же, что у пользователя.`
+Иногда допустима кошачья самоирония.
+Не превращай ответ в эссе.
+Если вопрос пользователя простой — отвечай коротко.
+
+ВАЖНО:
+- для вопросов про гранты, визы, дедлайны, стоимость, требования вузов, программы, поступление, стипендии и другую меняющуюся информацию сначала используй web search
+- если web search недоступен или не сработал, не выдумывай факты; честно скажи, что не удалось проверить актуальные данные прямо сейчас
+- для обычных языковых, мотивационных и атмосферных ответов работай без лишней длины
+- язык ответа — тот же, что у пользователя`
 
 type HistoryItem = {
   role: string
@@ -47,16 +58,19 @@ function extractTextFromResponsesApi(data: any): string {
   for (const item of output) {
     const content = Array.isArray(item?.content) ? item.content : []
     for (const block of content) {
-      if (block?.type === 'output_text' && typeof block?.text === 'string') {
-        parts.push(block.text)
+      if (typeof block?.text === 'string' && block.text.trim()) {
+        parts.push(block.text.trim())
       }
-      if (block?.type === 'text' && typeof block?.text === 'string') {
-        parts.push(block.text)
+      if (typeof block?.output_text === 'string' && block.output_text.trim()) {
+        parts.push(block.output_text.trim())
+      }
+      if (typeof block?.content === 'string' && block.content.trim()) {
+        parts.push(block.content.trim())
       }
     }
   }
 
-  return parts.join('').trim()
+  return parts.join('\n').trim()
 }
 
 async function callOpenAI({
@@ -72,7 +86,12 @@ async function callOpenAI({
     model: 'gpt-5-mini',
     instructions: SYSTEM,
     input,
-    max_output_tokens: 260,
+    // УВЕЛИЧИВАТЬ ПОРОГ ТОКЕНОВ НУЖНО ИМЕННО ЗДЕСЬ:
+    // 800 -> 1200 -> 2000, если снова увидишь пустой ответ
+    max_output_tokens: 800,
+    reasoning: {
+      effort: 'low',
+    },
   }
 
   if (useWebSearch) {
@@ -106,7 +125,7 @@ export async function POST(req: NextRequest) {
 
     if (!apiKey) {
       return NextResponse.json({
-        reply: 'DEBUG: env OpenAI_KEY_Michi is missing in runtime',
+        reply: 'Не вижу API-ключ OpenAI в окружении проекта.',
       })
     }
 
@@ -132,37 +151,42 @@ ${message}`
 
     const mustSearch = needsLiveSearch(String(message ?? ''))
 
-    let firstAttempt
-    try {
-      firstAttempt = await callOpenAI({
-        apiKey,
-        input,
-        useWebSearch: mustSearch,
-      })
-    } catch (fetchError: any) {
-      return NextResponse.json({
-        reply: `DEBUG fetch failed: ${fetchError?.message || String(fetchError)}`,
-      })
-    }
+    const firstAttempt = await callOpenAI({
+      apiKey,
+      input,
+      useWebSearch: mustSearch,
+    })
 
     if (!firstAttempt.ok) {
+      console.error('OpenAI error:', firstAttempt.status, firstAttempt.raw)
+
+      if (mustSearch) {
+        return NextResponse.json({
+          reply: 'Я попытался проверить актуальные данные, но поиск по веб-источникам сейчас не сработал. Попробуй ещё раз чуть позже.',
+        })
+      }
+
       return NextResponse.json({
-        reply: `DEBUG OpenAI ${firstAttempt.status}: ${firstAttempt.raw}`,
+        reply: 'Хм. Что-то пошло не так на моей стороне. Один момент.',
       })
     }
 
-    try {
-      const data = JSON.parse(firstAttempt.raw)
-      const reply = extractTextFromResponsesApi(data) || 'DEBUG: OpenAI returned OK but no output_text'
-      return NextResponse.json({ reply })
-    } catch (parseError: any) {
+    const data = JSON.parse(firstAttempt.raw)
+    const reply = extractTextFromResponsesApi(data)
+
+    if (!reply) {
+      console.error('OpenAI empty response:', firstAttempt.raw)
+
       return NextResponse.json({
-        reply: `DEBUG parse failed: ${parseError?.message || String(parseError)} | raw: ${firstAttempt.raw.slice(0, 500)}`,
+        reply: 'Я задумался слишком глубоко и потерял нить ответа. Попробуй ещё раз — я постараюсь сказать короче и яснее.',
       })
     }
+
+    return NextResponse.json({ reply })
   } catch (error: any) {
+    console.error('Chat error:', error)
     return NextResponse.json({
-      reply: `DEBUG catch: ${error?.message || String(error)}`,
+      reply: 'Хм. Что-то пошло не так на моей стороне. Один момент.',
     })
   }
 }
