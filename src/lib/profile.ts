@@ -2,6 +2,8 @@ import { Level } from '../../content/scenes'
 import { MichiState } from '../../content/michi_lines'
 import { PathCategory } from '../../content/path_cards'
 
+export type ResponseDepth = 'short' | 'normal' | 'deep'
+
 export interface UserProfile {
   userId: number
   level: Level
@@ -19,6 +21,7 @@ export interface UserProfile {
   pathInterests: PathCategory[]
   shownPathCards: string[]
   language: 'ru' | 'en'
+  responseDepth: ResponseDepth
   createdAt: string
 }
 
@@ -39,6 +42,7 @@ const DEFAULT_PROFILE: UserProfile = {
   pathInterests: [],
   shownPathCards: [],
   language: 'ru',
+  responseDepth: 'normal',
   createdAt: new Date().toISOString(),
 }
 
