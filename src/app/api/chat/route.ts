@@ -31,6 +31,8 @@ type HistoryItem = {
   content: string
 }
 
+type ResponseDepth = 'short' | 'normal' | 'deep'
+
 function needsLiveSearch(message: string): boolean {
   const text = message.toLowerCase()
 
@@ -45,6 +47,17 @@ function needsLiveSearch(message: string): boolean {
   ]
 
   return keywords.some((k) => text.includes(k))
+}
+
+function getMaxOutputTokens(depth: ResponseDepth | undefined, mustSearch: boolean): number {
+  const map: Record<ResponseDepth, number> = {
+    short: 400,
+    normal: 800,
+    deep: 1400,
+  }
+
+  const base = map[depth ?? 'normal']
+  return mustSearch ? Math.min(base + 300, 1800) : base
 }
 
 function extractTextFromResponsesApi(data: any): string {
@@ -77,18 +90,18 @@ async function callOpenAI({
   apiKey,
   input,
   useWebSearch,
+  responseDepth,
 }: {
   apiKey: string
   input: string
   useWebSearch: boolean
+  responseDepth?: ResponseDepth
 }) {
   const body: Record<string, unknown> = {
     model: 'gpt-5-mini',
     instructions: SYSTEM,
     input,
-    // УВЕЛИЧИВАТЬ ПОРОГ ТОКЕНОВ НУЖНО ИМЕННО ЗДЕСЬ:
-    // 800 -> 1200 -> 2000, если снова увидишь пустой ответ
-    max_output_tokens: 800,
+    max_output_tokens: getMaxOutputTokens(responseDepth, useWebSearch),
     reasoning: {
       effort: 'low',
     },
@@ -132,7 +145,7 @@ export async function POST(req: NextRequest) {
     const safeProfile = profile ?? {}
     const safeHistory: HistoryItem[] = Array.isArray(history) ? history.slice(-3) : []
 
-    const contextNote = `[Уровень японского пользователя: ${safeProfile.level ?? 'N4'}, открыто сцен: ${safeProfile.scenesOpened ?? 0}]`
+    const contextNote = `[Уровень японского пользователя: ${safeProfile.level ?? 'N4'}, открыто сцен: ${safeProfile.scenesOpened ?? 0}, глубина ответа: ${safeProfile.responseDepth ?? 'normal'}]`
 
     const historyText = safeHistory
       .map((m) => {
@@ -155,6 +168,7 @@ ${message}`
       apiKey,
       input,
       useWebSearch: mustSearch,
+      responseDepth: safeProfile.responseDepth,
     })
 
     if (!firstAttempt.ok) {
