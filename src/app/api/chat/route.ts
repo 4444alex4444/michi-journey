@@ -11,26 +11,9 @@ const SYSTEM = `Ты — Мичи (Michi, 道), аниме-кот путешес
 ТЕМЫ:
 японский язык, культура Японии, путь к учёбе, дизайн, животные, мягкая поддержка настроения.
 
-ЗАПРЕТЫ:
-длинные лекции без запроса, сарказм, давление, резкие оценки, уход в посторонние темы.
-
 СТИЛЬ:
 сначала образ или короткая мысль — потом польза.
-Иногда допустима кошачья самоирония.
-Не превращай ответ в эссе.
-Если вопрос пользователя простой — отвечай коротко.
-
-ВАЖНО:
-- для вопросов про гранты, визы, дедлайны, стоимость, требования вузов, программы, поступление, стипендии и другую меняющуюся информацию сначала используй web search
-- если web search недоступен или не сработал, не выдумывай факты; честно скажи, что не удалось проверить актуальные данные прямо сейчас
-- для обычных языковых, мотивационных и атмосферных ответов работай без лишней длины
-- язык ответа — тот же, что у пользователя`
-
-const FALLBACKS = [
-  'Хм. Что-то пошло не так на моей стороне. Один момент.',
-  'Не могу ответить прямо сейчас. Попробуй чуть позже.',
-  'Технические сложности. Поезд немного опаздывает.',
-]
+Язык ответа — тот же, что у пользователя.`
 
 type HistoryItem = {
   role: string
@@ -116,13 +99,14 @@ async function callOpenAI({
 
 export async function POST(req: NextRequest) {
   try {
-    const { message, profile, history } = await req.json()
+    const body = await req.json()
+    const { message, profile, history } = body
 
     const apiKey = process.env.OpenAI_KEY_Michi
 
     if (!apiKey) {
       return NextResponse.json({
-        reply: FALLBACKS[Math.floor(Math.random() * FALLBACKS.length)],
+        reply: 'DEBUG: env OpenAI_KEY_Michi is missing in runtime',
       })
     }
 
@@ -148,28 +132,37 @@ ${message}`
 
     const mustSearch = needsLiveSearch(String(message ?? ''))
 
-    const firstAttempt = await callOpenAI({
-      apiKey,
-      input,
-      useWebSearch: mustSearch,
-    })
+    let firstAttempt
+    try {
+      firstAttempt = await callOpenAI({
+        apiKey,
+        input,
+        useWebSearch: mustSearch,
+      })
+    } catch (fetchError: any) {
+      return NextResponse.json({
+        reply: `DEBUG fetch failed: ${fetchError?.message || String(fetchError)}`,
+      })
+    }
 
     if (!firstAttempt.ok) {
-  console.error('OpenAI first attempt error:', firstAttempt.status, firstAttempt.raw)
+      return NextResponse.json({
+        reply: `DEBUG OpenAI ${firstAttempt.status}: ${firstAttempt.raw}`,
+      })
+    }
 
-  return NextResponse.json({
-    reply: `DEBUG OpenAI ${firstAttempt.status}: ${firstAttempt.raw}`,
-  })
-}
-
-    const data = JSON.parse(firstAttempt.raw)
-    const reply = extractTextFromResponsesApi(data) || FALLBACKS[0]
-
-    return NextResponse.json({ reply })
-  } catch (error) {
-    console.error('Chat error:', error)
+    try {
+      const data = JSON.parse(firstAttempt.raw)
+      const reply = extractTextFromResponsesApi(data) || 'DEBUG: OpenAI returned OK but no output_text'
+      return NextResponse.json({ reply })
+    } catch (parseError: any) {
+      return NextResponse.json({
+        reply: `DEBUG parse failed: ${parseError?.message || String(parseError)} | raw: ${firstAttempt.raw.slice(0, 500)}`,
+      })
+    }
+  } catch (error: any) {
     return NextResponse.json({
-      reply: FALLBACKS[Math.floor(Math.random() * FALLBACKS.length)],
+      reply: `DEBUG catch: ${error?.message || String(error)}`,
     })
   }
 }
