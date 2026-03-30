@@ -65,7 +65,28 @@ function renderInline(text: string, linkColor: string): ReactNode[] {
   return nodes
 }
 
-function renderMessageContent(content: string, linkColor: string): ReactNode {
+function splitSourcesBlock(content: string): { main: string; sources: string[] } {
+  const normalized = content.replace(/\r/g, '').trim()
+  const marker = '\nИсточники:'
+  const altMarker = 'Источники:'
+
+  let idx = normalized.indexOf(marker)
+  if (idx === -1 && normalized.startsWith(altMarker)) idx = 0
+  if (idx === -1) return { main: normalized, sources: [] }
+
+  const before = normalized.slice(0, idx).trim()
+  const after = normalized.slice(idx).replace(/^Источники:\s*/m, '').trim()
+
+  const sourceLines = after
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => line.replace(/^[-•*]\s+/, '').trim())
+
+  return { main: before, sources: sourceLines }
+}
+
+function renderMainContent(content: string, linkColor: string): ReactNode {
   const normalized = content.replace(/\r/g, '').trim()
   const lines = normalized.split('\n')
   const blocks: ReactNode[] = []
@@ -127,6 +148,33 @@ function renderMessageContent(content: string, linkColor: string): ReactNode {
   return <>{blocks}</>
 }
 
+function renderSources(sources: string[], linkColor: string, border: string, bg: string): ReactNode {
+  if (!sources.length) return null
+
+  return (
+    <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${border}` }}>
+      <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 8 }}>Источники</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {sources.map((src, i) => (
+          <div
+            key={i}
+            style={{
+              padding: '10px 12px',
+              borderRadius: 12,
+              background: bg,
+              border: `1px solid ${border}`,
+              lineHeight: 1.5,
+              fontSize: 14,
+            }}
+          >
+            {renderInline(src, linkColor)}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export default function ChatScreen({ profile, onBack, isDark }: Props) {
   const [messages, setMessages] = useState<Message[]>([{
     role: 'michi',
@@ -143,6 +191,7 @@ export default function ChatScreen({ profile, onBack, isDark }: Props) {
   const border = isDark ? '#2a2a3e' : '#e8e5df'
   const userBubble = isDark ? '#2a2a3e' : '#f0ede8'
   const michiBubble = isDark ? 'rgba(196,168,130,0.12)' : 'rgba(139,108,66,0.08)'
+  const sourceBg = isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.55)'
   const linkColor = isDark ? '#d8c29d' : '#7a5c30'
 
   useEffect(() => {
@@ -190,20 +239,27 @@ export default function ChatScreen({ profile, onBack, isDark }: Props) {
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {messages.map((msg, i) => (
-          <div key={i} style={{ display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
-            {msg.role === 'michi' && <span style={{ fontSize: 20, marginRight: 8, alignSelf: 'flex-end', marginBottom: 2 }}>🐱</span>}
-            <div style={{
-              maxWidth: '78%', padding: '14px 18px', borderRadius: msg.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-              background: msg.role === 'user' ? userBubble : michiBubble,
-              border: `1px solid ${msg.role === 'user' ? border : isDark ? 'rgba(196,168,130,0.2)' : 'rgba(139,108,66,0.12)'}`,
-              fontSize: 16, color: fg, lineHeight: 1.7,
-              overflowWrap: 'anywhere',
-            }}>
-              {renderMessageContent(msg.content, linkColor)}
+        {messages.map((msg, i) => {
+          const parsed = msg.role === 'michi'
+            ? splitSourcesBlock(msg.content)
+            : { main: msg.content, sources: [] }
+
+          return (
+            <div key={i} style={{ display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
+              {msg.role === 'michi' && <span style={{ fontSize: 20, marginRight: 8, alignSelf: 'flex-end', marginBottom: 2 }}>🐱</span>}
+              <div style={{
+                maxWidth: '78%', padding: '14px 18px', borderRadius: msg.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+                background: msg.role === 'user' ? userBubble : michiBubble,
+                border: `1px solid ${msg.role === 'user' ? border : isDark ? 'rgba(196,168,130,0.2)' : 'rgba(139,108,66,0.12)'}`,
+                fontSize: 16, color: fg, lineHeight: 1.7,
+                overflowWrap: 'anywhere',
+              }}>
+                {renderMainContent(parsed.main, linkColor)}
+                {msg.role === 'michi' && renderSources(parsed.sources, linkColor, border, sourceBg)}
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
         {loading && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 20 }}>🐱</span>
