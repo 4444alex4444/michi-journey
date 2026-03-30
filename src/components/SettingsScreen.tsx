@@ -1,5 +1,5 @@
 'use client'
-import { UserProfile, updateProfile } from '@/lib/profile'
+import { UserProfile, updateProfile, ResponseDepth } from '@/lib/profile'
 import { Level } from '../../content/scenes'
 
 interface Props {
@@ -17,9 +17,19 @@ export default function SettingsScreen({ profile, onBack, onProfileUpdate, isDar
   const border = isDark ? '#2a2a3e' : '#e8e5df'
 
   const levels: Level[] = ['N5', 'N4-light', 'N4-core', 'N3']
+  const responseDepths: { value: ResponseDepth; label: string; hint: string }[] = [
+    { value: 'short', label: 'Коротко', hint: 'Быстро и по делу' },
+    { value: 'normal', label: 'Обычно', hint: 'Баланс глубины и скорости' },
+    { value: 'deep', label: 'Глубже', hint: 'Больше деталей и пояснений' },
+  ]
 
   function setLevel(l: Level) {
     updateProfile({ level: l, easyTaps: [], hardTaps: [] })
+    onProfileUpdate()
+  }
+
+  function setResponseDepth(depth: ResponseDepth) {
+    updateProfile({ responseDepth: depth })
     onProfileUpdate()
   }
 
@@ -40,7 +50,6 @@ export default function SettingsScreen({ profile, onBack, onProfileUpdate, isDar
 
       <div style={{ padding: '0 20px', display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-        {/* Level selector */}
         <div style={{ background: cardBg, borderRadius: 16, padding: '18px', border: `1px solid ${border}` }}>
           <div style={{ fontSize: 12, color: fgMuted, letterSpacing: '0.05em', marginBottom: 14 }}>УРОВЕНЬ ЯПОНСКОГО</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
@@ -65,7 +74,33 @@ export default function SettingsScreen({ profile, onBack, onProfileUpdate, isDar
           </div>
         </div>
 
-        {/* Stats */}
+        <div style={{ background: cardBg, borderRadius: 16, padding: '18px', border: `1px solid ${border}` }}>
+          <div style={{ fontSize: 12, color: fgMuted, letterSpacing: '0.05em', marginBottom: 14 }}>ГЛУБИНА ОТВЕТА МИЧИ</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {responseDepths.map(item => (
+              <button
+                key={item.value}
+                onClick={() => setResponseDepth(item.value)}
+                style={{
+                  padding: '14px 14px',
+                  borderRadius: 12,
+                  background: profile.responseDepth === item.value ? (isDark ? 'rgba(196,168,130,0.14)' : 'rgba(139,108,66,0.08)') : 'none',
+                  color: fg,
+                  border: `1.5px solid ${profile.responseDepth === item.value ? accent : border}`,
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 4 }}>{item.label}</div>
+                <div style={{ fontSize: 12, color: fgMuted }}>{item.hint}</div>
+              </button>
+            ))}
+          </div>
+          <div style={{ marginTop: 12, fontSize: 12, color: fgMuted, lineHeight: 1.5 }}>
+            Эта настройка влияет на длину и глубину ответов Мичи. Для актуальных вопросов про гранты и программы ответы всё равно могут быть чуть длиннее.
+          </div>
+        </div>
+
         <div style={{ background: cardBg, borderRadius: 16, padding: '18px', border: `1px solid ${border}` }}>
           <div style={{ fontSize: 12, color: fgMuted, letterSpacing: '0.05em', marginBottom: 14 }}>ТВОЙ ПУТЬ</div>
           {[
@@ -81,7 +116,6 @@ export default function SettingsScreen({ profile, onBack, onProfileUpdate, isDar
           ))}
         </div>
 
-        {/* Reset */}
         <button
           onClick={resetProfile}
           style={{

@@ -47,7 +47,11 @@ export default function ChatScreen({ profile, onBack, isDark }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: userMsg,
-          profile: { level: profile.level, scenesOpened: profile.scenesOpened },
+          profile: {
+            level: profile.level,
+            scenesOpened: profile.scenesOpened,
+            responseDepth: profile.responseDepth,
+          },
           history: messages.slice(-6),
         }),
       })
